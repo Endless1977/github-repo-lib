@@ -1,0 +1,32 @@
+{
+  "_uitleg": "Zoekopdrachten voor de scan, in GitHub-zoeksyntax. {30d} wordt vervangen door de datum van 30 dagen geleden, {1y} door die van een jaar geleden. 'own' zijn repos waarvan het soort (spel of app) uit overrides.json of de beschrijving komt.",
+  "game": [
+    "topic:html5-game stars:>30",
+    "topic:browser-game stars:>30",
+    "topic:game topic:multiplayer stars:>50",
+    "topic:game topic:open-source stars:>200",
+    "topic:game-3d stars:>20",
+    "topic:pixel-art topic:game stars:>30",
+    "topic:roguelike stars:>100",
+    "topic:godot-game stars:>30",
+    "topic:game topic:javascript stars:>100",
+    "topic:game created:>{1y} stars:>25",
+    "topic:html5-game pushed:>{30d} stars:>10",
+    "topic:multiplayer topic:browser-game stars:>5"
+  ],
+  "app": [
+    "topic:self-hosted stars:>2000",
+    "topic:productivity topic:desktop-app stars:>300",
+    "topic:electron-app stars:>1000",
+    "topic:cli-app stars:>1500",
+    "topic:android-app topic:open-source stars:>500",
+    "topic:home-automation stars:>500",
+    "topic:pwa topic:web-app stars:>200",
+    "topic:note-taking stars:>1000",
+    "topic:self-hosted created:>{1y} stars:>200",
+    "topic:home-assistant created:>{1y} stars:>50"
+  ],
+  "own": [
+    "user:Endless1977"
+  ]
+}
