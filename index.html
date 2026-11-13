@@ -274,7 +274,14 @@ const PERMISSIVE = ['MIT','Apache-2.0','BSD-2-Clause','BSD-3-Clause','ISC','Unli
 
 const isNew = r => !!r._new || (!!r.nw && (NOW - Date.parse(r.nw)) < 14*864e5);
 function hash(s){let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))|0;return Math.abs(h)}
-function isRepoLink(u){return /^https?:\/\/(www\.)?github\.com\//i.test(u)}
+function isRepoLink(u){return /^https?:\/\/(www\.)?(github\.com|gitlab\.com|codeberg\.org|f-droid\.org)\//i.test(u)}
+const SRC_LABEL = {github:'GitHub', gitlab:'GitLab', codeberg:'Codeberg', fdroid:'F-Droid'};
+const srcOf = r => r.src || 'github';
+const webUrl = r => r.u || `https://github.com/${r.f}`;
+const pathOf = r => webUrl(r).replace(/^https?:\/\/(www\.)?/,'').replace(/\/$/,'');
+/* git-URL om te klonen: de repo zelf, of voor een losse F-Droid-app de broncode-link */
+const gitUrl = r => { const u = srcOf(r)==='fdroid' ? r.sc : webUrl(r); return u && /^https?:\/\/[^/]+\/[^/]+\/[^/]+/.test(u) && !/f-droid\.org/.test(u) ? u.replace(/\/$/,'').replace(/(\.git)?$/,'.git') : ''; };
+const releasesUrl = r => ({github:`https://github.com/${r.f}/releases`, gitlab:r.u+'/-/releases', codeberg:r.u+'/releases'})[srcOf(r)] || '';
 
 function enrich(r){
  const txt = (r.n.replace(/[-_]/g,' ')+' '+r.d+' '+r.t.join(' ')).toLowerCase();
@@ -290,6 +297,7 @@ function enrich(r){
  const lang = r.l || '';
  const webTech = /^(HTML|JavaScript|TypeScript|CSS|Vue|Svelte)$/.test(lang);
  r.launch = [];
+ if (srcOf(r)==='fdroid') { if (url) r.site = url; url = ''; }
  if (r.k === 'game') {
   if (url && (r.g || webTech || /itch\.io|play|game|\.io\//i.test(url) || R.web.test(tt))) { r.play = url; r.launch.push('Online speelbaar'); }
   else if (url) r.site = url;
@@ -310,8 +318,11 @@ function enrich(r){
   r.lic = !r.li || r.li==='NOASSERTION' ? 'Geen / onduidelijk' : PERMISSIVE.includes(r.li) ? 'Vrij (MIT, Apache…)' : /GPL/.test(r.li) ? 'Copyleft (GPL)' : 'Overig';
   r.self = R.selfh.test(tt) ? 'Self-hosted' : 'Niet self-hosted';
  }
+ if (r.fd) r.launch.push('F-Droid (Android)');
+ if (r.fd && r.k==='app' && !r.plat.includes('Android')) { r.plat = r.plat.filter(x=>x!=='Onbekend'); r.plat.push('Android'); }
+ r.bron = [SRC_LABEL[srcOf(r)] || srcOf(r)]; if (r.fd && srcOf(r)!=='fdroid') r.bron.push('F-Droid');
  if (R.docker.test(tt) && r.k==='app') r.launch.push('Docker');
- r.launch.push('Zelf installeren');
+ if (gitUrl(r) || srcOf(r)!=='fdroid') r.launch.push('Zelf installeren');
  r.gfxClass = r.k==='app' ? 'ap' : ({'Pixel art':'px','3D':'d3','Voxel':'vx','Tekst / ASCII':'tx','2D':'d2'})[r.gfx[0]] || 'd2';
  r.hue = r.k==='game' ? (hash(r.f)%120)+ (hash(r.f)%2?10:200) : 150 + hash(r.f)%110;
  return r;
@@ -326,6 +337,7 @@ const FACETS = {
   {key:'gfx', label:'Grafische stijl'},
   {key:'launch', label:'Hoe start je het'},
   {key:'engine', label:'Engine / techniek'},
+  {key:'bron', label:'Bron'},
  ],
  app: [
   {key:'cat', label:'Categorie'},
@@ -334,6 +346,7 @@ const FACETS = {
   {key:'self', label:'Hosting'},
   {key:'status', label:'Status'},
   {key:'lic', label:'Licentie'},
+  {key:'bron', label:'Bron'},
  ]
 };
 const vals = (r,k) => Array.isArray(r[k]) ? r[k] : [r[k]];
@@ -455,15 +468,15 @@ async function fetchShots(r){
   } catch(e) { return; }
  }
 }
-const shotIO = 'IntersectionObserver' in window ? new IntersectionObserver(es=>es.forEach(e=>{ if(!e.isIntersecting) return; shotIO.unobserve(e.target); const r=LIST[+e.target.dataset.i]; if (r && !r._shotTry && (r.live||r.m) && !(r.i&&r.i.length)) fetchShots(r); }), {rootMargin:'200px'}) : null;
+const shotIO = 'IntersectionObserver' in window ? new IntersectionObserver(es=>es.forEach(e=>{ if(!e.isIntersecting) return; shotIO.unobserve(e.target); const r=LIST[+e.target.dataset.i]; if (r && !r._shotTry && srcOf(r)==='github' && (r.live||r.m) && !(r.i&&r.i.length)) fetchShots(r); }), {rootMargin:'200px'}) : null;
 function card(r, i){
  const tags = (r.k==='game'? r.genre : r.cat).filter(x=>x!=='Overig').slice(0,3).map(t=>`<span class="tag">${esc(t)}</span>`).join('');
  const launch = r.play ? `<a class="launch on" href="${esc(r.play)}" target="_blank" rel="noopener" data-stop>${r.k==='game'?'▶ Speel online':'Open web-app'}</a>`
-   : `<span class="launch ins">${r.launch.includes('Docker')?'Docker':'Installeren'}</span>`;
+   : `<span class="launch ins">${r.fd?'F-Droid':r.launch.includes('Docker')?'Docker':'Installeren'}</span>`;
  return `<article class="card" data-i="${i}" tabindex="0"><div>${cover(r)}</div><div class="cb">
-  <h4>${esc(r.n.replace(/[-_]/g,' '))}</h4><div class="own">${esc(r.o)}${r.l?' · '+esc(r.l):''}</div>
+  <h4>${esc(r.n.replace(/[-_]/g,' '))}</h4><div class="own">${esc([r.o, r.l, srcOf(r)!=='github'?SRC_LABEL[srcOf(r)]:''].filter(x=>x&&x!=='F-Droid'||x===SRC_LABEL[srcOf(r)]).filter((x,i,a)=>a.indexOf(x)===i).join(' · '))}</div>
   <p class="desc">${esc(r.d)||'<i>Geen beschrijving</i>'}</p><div class="tags">${tags}</div>
-  <div class="foot"><div class="meta"><span title="Sterren">★ ${fmtN(r.s)}</span><span title="Laatst bijgewerkt ${r.p}">${ago(r.updM)}</span></div>${launch}</div></div></article>`;
+  <div class="foot"><div class="meta">${srcOf(r)==='fdroid'?'<span>Android-app</span>':`<span title="Sterren">★ ${fmtN(r.s)}</span>`}<span title="Laatst bijgewerkt ${r.p}">${ago(r.updM)}</span></div>${launch}</div></div></article>`;
 }
 let LIST = [];
 function renderGrid(){
@@ -498,12 +511,14 @@ function renderStatus(){
 
 /* ---------- detail ---------- */
 function buildSteps(r){
- const repo = `https://github.com/${r.f}`;
- const steps = [];
+ const steps = [], git = gitUrl(r), rel = releasesUrl(r);
  if (r.play) steps.push(`<li><div><strong>${r.k==='game'?'Direct spelen in je browser':'Direct openen in je browser'}</strong>Niets installeren nodig.<div class="links" style="margin-top:6px"><a class="btn pri" href="${esc(r.play)}" target="_blank" rel="noopener">${r.k==='game'?'▶ Speel nu':'Open'} — ${esc(r.play.replace(/^https?:\/\//,'').replace(/\/$/,''))}</a></div></div></li>`);
- steps.push(`<li><div><strong>Kant-en-klare download</strong>Veel projecten zetten een installer of zip klaar onder Releases. Kijk daar eerst, dat scheelt zelf bouwen.<div class="links" style="margin-top:6px"><a class="btn" href="${repo}/releases" target="_blank" rel="noopener">Releases bekijken</a></div></div></li>`);
- if (r.launch.includes('Docker')) steps.push(`<li><div><strong>Met Docker op je eigen server</strong>Geschikt voor een Raspberry Pi of NAS. De README noemt meestal een kant-en-klaar <code>docker-compose.yml</code>.<pre>git clone ${repo}.git\ncd ${r.n}\ndocker compose up -d<button class="btn copy">Kopieer</button></pre></div></li>`);
- const l = r.l||'', cl = `git clone ${repo}.git\ncd ${r.n}\n`;
+ if (r.fd) steps.push(`<li><div><strong>Installeren op Android via F-Droid</strong>Open de link op je telefoon. Heb je de F-Droid-app, dan installeer je hem daar met één tik; anders kun je de APK van de pagina downloaden.<div class="links" style="margin-top:6px"><a class="btn pri" href="https://f-droid.org/packages/${esc(r.fd)}/" target="_blank" rel="noopener">Open in F-Droid</a></div></div></li>`);
+ if (rel) steps.push(`<li><div><strong>Kant-en-klare download</strong>Veel projecten zetten een installer of zip klaar onder Releases. Kijk daar eerst, dat scheelt zelf bouwen.<div class="links" style="margin-top:6px"><a class="btn" href="${esc(rel)}" target="_blank" rel="noopener">Releases bekijken</a></div></div></li>`);
+ if (!git) return steps.join('');
+ const dir = (git.split('/').pop()||r.n).replace(/\.git$/,'');
+ if (r.launch.includes('Docker')) steps.push(`<li><div><strong>Met Docker op je eigen server</strong>Geschikt voor een Raspberry Pi of NAS. De README noemt meestal een kant-en-klaar <code>docker-compose.yml</code>.<pre>git clone ${esc(git)}\ncd ${esc(dir)}\ndocker compose up -d<button class="btn copy">Kopieer</button></pre></div></li>`);
+ const l = r.l||'', cl = `git clone ${git}\ncd ${dir}\n`;
  let cmd='', how='Volg de bouwinstructies in de README.';
  if (l==='HTML'||l==='CSS') { cmd = cl+'# open index.html in je browser\n# of: python -m http.server 8000'; how='Puur HTML: na downloaden index.html openen, of een simpele lokale server starten.'; }
  else if (/^(JavaScript|TypeScript|Vue|Svelte)$/.test(l)) { cmd = cl+'npm install\nnpm start   # of: npm run dev'; how='Vereist Node.js.'; }
@@ -523,22 +538,22 @@ function buildSteps(r){
 function openDetail(r){
  const f = (lbl,v)=>`<div><span>${lbl}</span>${esc(v)}</div>`;
  const facts = r.k==='game'
-  ? [f('Soort',r.genre.join(', ')),f('Spelers',r.mp.join(', ')),f('Grafisch',r.gfx.join(', ')),f('Engine',r.engine.join(', ')),f('Status',r.status),f('Sterren',r.s.toLocaleString('nl-NL')),f('Aangemaakt',r.c),f('Bijgewerkt',r.p+' ('+ago(r.updM)+')'),f('Taal',r.l||'—'),f('Licentie',r.li||'geen')]
-  : [f('Categorie',r.cat.join(', ')),f('Platform',r.plat.join(', ')),f('Hosting',r.self),f('Status',r.status),f('Sterren',r.s.toLocaleString('nl-NL')),f('Aangemaakt',r.c),f('Bijgewerkt',r.p+' ('+ago(r.updM)+')'),f('Taal',r.l||'—'),f('Licentie',r.li||'geen')];
+  ? [f('Soort',r.genre.join(', ')),f('Spelers',r.mp.join(', ')),f('Grafisch',r.gfx.join(', ')),f('Engine',r.engine.join(', ')),f('Status',r.status),f('Bron',r.bron.join(' + ')),f('Sterren',srcOf(r)==='fdroid'?'—':r.s.toLocaleString('nl-NL')),f('Aangemaakt',r.c),f('Bijgewerkt',r.p+' ('+ago(r.updM)+')'),f('Taal',r.l||'—'),f('Licentie',r.li||'geen')]
+  : [f('Categorie',r.cat.join(', ')),f('Platform',r.plat.join(', ')),f('Hosting',r.self),f('Status',r.status),f('Bron',r.bron.join(' + ')),f('Sterren',srcOf(r)==='fdroid'?'—':r.s.toLocaleString('nl-NL')),f('Aangemaakt',r.c),f('Bijgewerkt',r.p+' ('+ago(r.updM)+')'),f('Taal',r.l||'—'),f('Licentie',r.li||'geen')];
  const ov = document.getElementById('overlay');
  ov.innerHTML = `<div class="ov" id="ovbg"><div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dlgT">${r.i&&r.i.length?'<div class="gal" id="gal"></div>':cover(r,true)}<div class="in">
-  <div><button class="btn x" id="close">Sluiten</button><h2 id="dlgT">${esc(r.n.replace(/[-_]/g,' '))}</h2><div class="own">${esc(r.f)}</div></div>
+  <div><button class="btn x" id="close">Sluiten</button><h2 id="dlgT">${esc(r.n.replace(/[-_]/g,' '))}</h2><div class="own">${esc(pathOf(r))}</div></div>
   <p>${esc(r.d)||'<i>Geen beschrijving opgegeven.</i>'}</p>
   <div class="facts">${facts.join('')}</div>
   ${r.t.length?`<div class="tags">${r.t.map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div>`:''}
   <h3 style="font-family:var(--display);margin:4px 0 0;font-size:18px">Zo start je het</h3>
   <ol class="steps">${buildSteps(r)}</ol>
-  <div class="links"><a class="btn" href="https://github.com/${esc(r.f)}" target="_blank" rel="noopener">Bekijk op GitHub</a><a class="btn" href="https://github.com/${esc(r.f)}#readme" target="_blank" rel="noopener">README</a>${r.site?`<a class="btn" href="${esc(r.site)}" target="_blank" rel="noopener">Website</a>`:''}</div>
-  <p class="note">Labels zoals genre, multiplayer en beta zijn afgeleid uit de beschrijving en onderwerpen van de repository. Controleer de README voor zekerheid.</p>
+  <div class="links"><a class="btn" href="${esc(webUrl(r))}" target="_blank" rel="noopener">Bekijk op ${esc(SRC_LABEL[srcOf(r)]||'de bron')}</a>${srcOf(r)==='fdroid'&&r.sc?`<a class="btn" href="${esc(r.sc)}" target="_blank" rel="noopener">Broncode</a>`:''}${srcOf(r)==='github'?`<a class="btn" href="https://github.com/${esc(r.f)}#readme" target="_blank" rel="noopener">README</a>`:''}${r.site?`<a class="btn" href="${esc(r.site)}" target="_blank" rel="noopener">Website</a>`:''}</div>
+  <p class="note">Labels zoals genre, multiplayer en beta zijn afgeleid uit de beschrijving en onderwerpen${srcOf(r)==='fdroid'?' en de F-Droid-categorie':' van de repository'}. Controleer de README voor zekerheid.</p>
  </div></div></div>`;
  GAL = null; renderGal(r, 0);
  document.getElementById('close').focus();
- if (!r.i?.length && !r._shotTry && (r.live||r.m)) fetchShots(r).then(()=>{ if (r.i?.length && document.getElementById('dlgT')) { const c=document.querySelector('.dlg .cov'); if(c){ c.outerHTML='<div class="gal" id="gal"></div>'; renderGal(r,0);} } });
+ if (!r.i?.length && !r._shotTry && srcOf(r)==='github' && (r.live||r.m)) fetchShots(r).then(()=>{ if (r.i?.length && document.getElementById('dlgT')) { const c=document.querySelector('.dlg .cov'); if(c){ c.outerHTML='<div class="gal" id="gal"></div>'; renderGal(r,0);} } });
 }
 function closeOv(){ if (document.getElementById('lb')) { document.getElementById('lb').remove(); return; } document.getElementById('overlay').innerHTML=''; GAL=null; }
 
@@ -549,7 +564,7 @@ const LS_KEY = 'repolib-extra-v1';
 let QRY = {game:[], app:[], own:['user:'+OWNER]}, OVR = {};
 let TOKEN = '';
 const GAME_RX = /\b(game|games|spel|spellen|multiplayer|shooter|rpg|racing|race|arcade|platformer|puzzle|roguelike|beat.?em.?up|adventure|avontuur|dogfight|level|levels|boss|bazen)\b/i;
-const RAWKEYS = ['k','n','f','d','t','l','s','c','p','h','g','a','li','o','m','i','nw','ic'];
+const RAWKEYS = ['k','src','n','f','u','b','d','t','l','s','c','p','h','g','a','li','o','m','i','nw','ic','fd','sc'];
 const raw = r => { const o={}; for (const k of RAWKEYS) if (r[k]!==undefined && r[k]!=='' && !(Array.isArray(r[k])&&!r[k].length&&k==='i')) o[k]=r[k]; return o; };
 const today = () => new Date().toISOString().slice(0,10);
 const dayOffset = n => new Date(Date.now()-n*864e5).toISOString().slice(0,10);
@@ -589,7 +604,7 @@ function openScan(){
  const qs = [...(QRY[S.tab]||[]), ...(QRY.own||[])].map(subst);
  ov.innerHTML = `<div class="ov" id="ovbg"><div class="dlg" role="dialog" aria-modal="true" aria-labelledby="scT"><div class="in">
   <div><button class="btn x" id="close">Sluiten</button><h2 id="scT">Live scannen op GitHub</h2></div>
-  <p>Haalt actuele repositories op en voegt nieuwe toe aan de ${S.tab==='game'?'spellen':'apps'}. Eén zoekopdracht per regel, in GitHub-zoeksyntax. Repos van <code>user:</code>-regels worden automatisch als spel of app ingedeeld.</p>
+  <p>Haalt actuele repositories op en voegt nieuwe toe aan de ${S.tab==='game'?'spellen':'apps'}. Eén zoekopdracht per regel, in GitHub-zoeksyntax. Repos van <code>user:</code>-regels worden automatisch als spel of app ingedeeld. GitLab, Codeberg en F-Droid worden elke nacht door de automatische scan meegenomen; hier scan je GitHub.</p>
   <label for="liveQ" style="font-weight:600">Zoekopdrachten</label>
   <textarea id="liveQ">${esc(qs.join('\n'))}</textarea>
   <div class="links"><button class="btn" data-pre="topic:${S.tab==='game'?'game':'self-hosted'} created:>${dayOffset(30)} stars:>3">+ Nieuw deze maand</button><button class="btn" data-pre="topic:multiplayer topic:html5 stars:>10">+ HTML5 multiplayer</button></div>
@@ -635,7 +650,7 @@ async function saveToRepo(){
  btn.disabled = true; log.textContent += '\n\nOpslaan in repo … ';
  const H = {Accept:'application/vnd.github+json', Authorization:'Bearer '+TOKEN};
  try {
-  const cur = await fetch(`https://api.github.com/repos/${REPO}/contents/data.json?ref=main`, {headers:H, cache:'no-store'});
+  const cur = await fetch(`https://api.github.com/repos/${REPO}/contents/data.json?ref=main`, {headers:Object.assign({}, H, {Accept:'application/vnd.github.object'}), cache:'no-store'});
   if (!cur.ok) throw new Error(cur.status===404?'repo of data.json niet gevonden':cur.status===401?'token ongeldig':'kan data.json niet lezen ('+cur.status+')');
   const meta = await cur.json();
   // eerst de nieuwste versie uit de repo erbij halen, zodat een tussentijdse dagelijkse scan niet verloren gaat

@@ -1,19 +1,19 @@
 # Repo Bibliotheek
 
-Steam-achtige bibliotheek van open-source **spellen** en **apps** op GitHub.
+Steam-achtige bibliotheek van open-source **spellen** en **apps** van GitHub, GitLab, Codeberg en F-Droid.
 
 - Filters voor spellen: soort spel, multiplayer/co-op, status (beta), grafische stijl, engine, leeftijd, laatst bijgewerkt, sterren
 - Filters voor apps: categorie, platform, hosting (self-hosted), licentie, status
 - Per repository: hoe je het start (online spelen, Releases, Docker of zelf bouwen) met directe links en commando's
 - **Live scannen**: haalt actuele repositories op via de GitHub-zoek-API (werkt op GitHub Pages). Nieuwe resultaten worden in je browser bewaard; met een token klik je **Opslaan in repo** om ze in `data.json` vast te leggen.
-- **Dagelijkse scan**: `.github/workflows/scan.yml` draait elke nacht `scripts/scan.py` en voegt nieuwe repos blijvend toe aan `data.json`. Handmatig starten kan via het tabblad *Actions* → *Bibliotheek scannen* → *Run workflow*.
+- **Dagelijkse scan**: `.github/workflows/scan.yml` draait elke nacht `scripts/scan.py` en voegt nieuwe repos van GitHub, GitLab, Codeberg en F-Droid blijvend toe aan `data.json`. F-Droid-apps waarvan de broncode al in de bibliotheek staat, krijgen een knop *Open in F-Droid* in plaats van een dubbele kaart. Een optioneel secret `GITLAB_TOKEN` geeft GitLab ruimere limieten. Handmatig starten kan via het tabblad *Actions* → *Bibliotheek scannen* → *Run workflow*.
 
 ## Bestanden
 
 | Bestand | Wat |
 |---|---|
 | `data.json` | Alle repos in de bibliotheek (wordt nooit kleiner, alleen aangevuld) |
-| `queries.json` | De zoekopdrachten voor spellen, apps en je eigen repos |
+| `queries.json` | De zoekopdrachten per bron: GitHub (spellen, apps, eigen repos), GitLab- en Codeberg-topics, F-Droid-instellingen |
 | `overrides.json` | Soort, beschrijving en labels voor repos zonder topics (zoals je eigen spellen) |
 | `scripts/scan.py` | De scan; lokaal draaien kan met `python scripts/scan.py` |
 

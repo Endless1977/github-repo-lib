@@ -1,5 +1,5 @@
 {
-  "_uitleg": "Zoekopdrachten voor de scan, in GitHub-zoeksyntax. {30d} wordt vervangen door de datum van 30 dagen geleden, {1y} door die van een jaar geleden. 'own' zijn repos waarvan het soort (spel of app) uit overrides.json of de beschrijving komt.",
+  "_uitleg": "Zoekopdrachten voor de scan, in GitHub-zoeksyntax. {30d} wordt vervangen door de datum van 30 dagen geleden, {1y} door die van een jaar geleden. 'own' zijn repos waarvan het soort (spel of app) uit overrides.json of de beschrijving komt. gitlab/codeberg: topics per soort, met minimaal aantal sterren. fdroid: alle spellen, en apps die binnen het opgegeven aantal dagen zijn bijgewerkt. Zet een bron op null om hem over te slaan.",
   "game": [
     "topic:html5-game stars:>30",
     "topic:browser-game stars:>30",
@@ -28,5 +28,44 @@
   ],
   "own": [
     "user:Endless1977"
-  ]
+  ],
+  "gitlab": {
+    "game": [
+      "game",
+      "html5-game",
+      "godot",
+      "gamedev",
+      "multiplayer"
+    ],
+    "app": [
+      "self-hosted",
+      "android",
+      "linux",
+      "web-app",
+      "home-assistant"
+    ],
+    "min_stars": 10,
+    "active_within_days": 730,
+    "pages": 5
+  },
+  "codeberg": {
+    "game": [
+      "game",
+      "games",
+      "godot"
+    ],
+    "app": [
+      "self-hosted",
+      "android",
+      "app",
+      "linux",
+      "web-app"
+    ],
+    "min_stars": 5,
+    "pages": 4
+  },
+  "fdroid": {
+    "apps_updated_within_days": 730,
+    "max_screenshots": 4
+  }
 }
