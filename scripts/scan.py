@@ -41,15 +41,24 @@ def rec_of(r, kind):
                 li=((r.get('license') or {}).get('spdx_id') or ''), o=r['owner']['login'])
 
 UA = {'User-Agent': 'repo-bibliotheek-scan'}
+START = time.time()
+# maximale tijd per onderdeel in seconden, zodat een trage bron de hele scan niet ophoudt
+BUDGET = {'gitlab': 360, 'codeberg': 240, 'fdroid': 300, 'shots': 480}
+_deadline = {}
+def start_budget(name): _deadline[name] = time.time() + BUDGET[name]
+def over(name):
+    if time.time() > _deadline.get(name, float('inf')):
+        print(f'  tijdslimiet {name} bereikt, rest overgeslagen', flush=True); return True
+    return False
 
-def fetch_json(url, headers=None, timeout=60):
+def fetch_json(url, headers=None, timeout=30, tries=2):
     """JSON ophalen bij een andere bron dan de GitHub-API. Geeft None bij een fout."""
-    for attempt in range(3):
+    for attempt in range(tries):
         try:
             with urllib.request.urlopen(urllib.request.Request(url, headers={**UA, **(headers or {})}), timeout=timeout) as r:
                 return json.load(r)
         except urllib.error.HTTPError as e:
-            if e.code == 429: time.sleep(int(e.headers.get('Retry-After') or 30)); continue
+            if e.code == 429 and attempt < tries - 1: time.sleep(min(int(e.headers.get('Retry-After') or 20), 30)); continue
             print(f'  fout {e.code}: {url}', flush=True); return None
         except Exception as e:
             print(f'  fout: {e} ({url})', flush=True); time.sleep(3)
@@ -73,16 +82,25 @@ def scan_gitlab(cfg):
     since = (TODAY - datetime.timedelta(days=cfg.get('active_within_days', 730))).isoformat() + 'T00:00:00Z'
     hdr = {'PRIVATE-TOKEN': os.environ['GITLAB_TOKEN']} if os.environ.get('GITLAB_TOKEN') else {}
     seen = set()
+    start_budget('gitlab')
+    order = 'star_count'
     for group in ('game', 'app'):
         for topic in cfg.get(group, []):
             n = 0
-            for page in range(1, cfg.get('pages', 5) + 1):
-                items = fetch_json(f'{base}/api/v4/projects?' + urllib.parse.urlencode({
-                    'topic': topic, 'visibility': 'public', 'order_by': 'last_activity_at', 'sort': 'desc',
-                    'last_activity_after': since, 'per_page': 100, 'page': page}), hdr)
+            for page in range(1, cfg.get('pages', 3) + 1):
+                if over('gitlab'): return out
+                params = {'topic': topic, 'visibility': 'public', 'order_by': order, 'sort': 'desc', 'per_page': 100, 'page': page}
+                t0 = time.time()
+                items = fetch_json(f'{base}/api/v4/projects?' + urllib.parse.urlencode(params), hdr, timeout=25, tries=1)
+                if items is None and order == 'star_count':
+                    order = 'last_activity_at'; params['order_by'] = order
+                    print('  gitlab: sorteren op sterren niet toegestaan, val terug op laatste activiteit', flush=True)
+                    items = fetch_json(f'{base}/api/v4/projects?' + urllib.parse.urlencode(params), hdr, timeout=25, tries=1)
+                print(f'  gitlab topic:{topic} pagina {page}: {len(items or [])} in {time.time()-t0:.1f}s', flush=True)
                 if not items: break
                 for p in items:
                     if p['id'] in seen or (p.get('star_count') or 0) < min_stars or p.get('forked_from_project'): continue
+                    if (p.get('last_activity_at') or '') < since[:10]: continue
                     seen.add(p['id']); n += 1
                     path = p['path_with_namespace']
                     desc = (p.get('description') or '').strip()
@@ -92,12 +110,13 @@ def scan_gitlab(cfg):
                         d=desc[:220], t=(p.get('topics') or p.get('tag_list') or [])[:14], l=None,
                         s=p.get('star_count') or 0, c=(p.get('created_at') or '')[:10], p=(p.get('last_activity_at') or '')[:10],
                         h=first_url(desc), g=False, a=bool(p.get('archived')), li='', o=path.split('/')[0], _gid=p['id']))
-                if len(items) < 100: break
+                if len(items) < 100 or (order == 'star_count' and (items[-1].get('star_count') or 0) < min_stars): break
             print(f'gitlab {group:4} topic:{topic}: {n} met >= {min_stars} sterren', flush=True)
     return out
 
 def gitlab_language(rec, base='https://gitlab.com'):
-    js = fetch_json(f"{base}/api/v4/projects/{rec['_gid']}/languages", timeout=20)
+    if over('gitlab'): return None
+    js = fetch_json(f"{base}/api/v4/projects/{rec['_gid']}/languages", timeout=10, tries=1)
     return max(js, key=js.get) if js else None
 
 # ---------- Codeberg (Forgejo/Gitea) ----------
@@ -108,10 +127,12 @@ def scan_codeberg(cfg):
     name = cfg.get('name', 'codeberg')
     min_stars = cfg.get('min_stars', 5)
     seen = set()
+    start_budget('codeberg')
     for group in ('game', 'app'):
         for topic in cfg.get(group, []):
             n = 0
             for page in range(1, cfg.get('pages', 4) + 1):
+                if over('codeberg'): return out
                 js = fetch_json(f'{base}/api/v1/repos/search?' + urllib.parse.urlencode({
                     'q': topic, 'topic': 'true', 'sort': 'stars', 'order': 'desc', 'limit': 50, 'page': page}))
                 items = (js or {}).get('data') or []
@@ -143,7 +164,8 @@ def scan_fdroid(cfg):
     out = []
     if not cfg: return out
     repo = cfg.get('repo', 'https://f-droid.org/repo').rstrip('/')
-    js = fetch_json(repo + '/index-v1.json', timeout=180)
+    start_budget('fdroid')
+    js = fetch_json(repo + '/index-v1.json', timeout=240, tries=1)
     if not js:
         print('fdroid: index niet geladen', flush=True); return out
     cut = (TODAY - datetime.timedelta(days=cfg.get('apps_updated_within_days', 730)))
@@ -206,7 +228,7 @@ def shots(r):
     txt = ''
     for url in urls_try:
         try:
-            with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=20) as resp:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=10) as resp:
                 txt = resp.read().decode('utf8', 'ignore'); break
         except Exception: pass
     if not txt: return []
@@ -291,7 +313,8 @@ def main():
         except Exception as e:
             print(f'{label}: overgeslagen door fout: {e}', flush=True); continue
         new_gl = [r for r in found if r.get('src') == 'gitlab' and r['f'] not in by]
-        for r in new_gl[:300]:
+        start_budget('gitlab')
+        for r in new_gl[:150]:
             r['l'] = gitlab_language(r)
         for r in found:
             gid = r.pop('_gid', None)
@@ -310,8 +333,12 @@ def main():
     cutoff = str(TODAY - datetime.timedelta(days=30))
     todo = [r for r in data if r.get('src') != 'fdroid' and (r.get('m') or not r.get('ic') or r['ic'] < cutoff)]
     print(f'screenshots zoeken in {len(todo)} READMEs', flush=True)
+    start_budget('shots')
+    def shots_timed(r):
+        return None if time.time() > _deadline['shots'] else shots(r)
     with cf.ThreadPoolExecutor(16) as ex:
-        for r, found in zip(todo, ex.map(shots, todo)):
+        for r, found in zip(todo, ex.map(shots_timed, todo)):
+            if found is None: continue   # tijdslimiet: volgende scan verder
             if found: r['i'] = found
             elif r.get('m'): r.pop('i', None)
             r['ic'] = str(TODAY)
@@ -322,7 +349,7 @@ def main():
     print('per bron:', per, flush=True)
     with open(P('data.json'), 'w', encoding='utf8') as fh:
         json.dump(data, fh, ensure_ascii=False, separators=(',', ':'))
-    print(f'klaar: {added} nieuw, {updated} bijgewerkt, totaal {len(data)}', flush=True)
+    print(f'klaar in {(time.time()-START)/60:.1f} min: {added} nieuw, {updated} bijgewerkt, totaal {len(data)}', flush=True)
 
 if __name__ == '__main__':
     main()
