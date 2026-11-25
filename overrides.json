@@ -10,6 +10,7 @@
   "Endless1977/Noodlanding": {"k":"game","d":"Multiplayer astronaut-ontsnappingsspel: noodlanding op een planeet, zones, bazen en upgrades","t":["rpg","multiplayer","co-op","pixel-art"]},
   "Endless1977/Domination": {"k":"game","d":"3D wireframe multiplayer-spel: The final domination battle of the World","t":["strategy","multiplayer","3d","wireframe"]},
   "Endless1977/FighterDudes": {"k":"game","d":"Beat 'em up in Double Dragon-stijl voor 1 tot 3 spelers online","t":["beat-em-up","action","multiplayer","co-op","2d"]},
+  "Endless1977/Aethari": {"k":"game","d":"Verhaalgedreven co-op sci-fi game voor 1–3 spelers: van het zaadschip en de kolonie terug naar de Aarde","t":["action","rts","shooter","multiplayer","co-op","story","2d"]},
   "Endless1977/Warpath2026": {"k":"game","d":"3D-remake van Warpath: 21st Century","t":["shooter","action","multiplayer","3d"]},
   "Endless1977/windows-diagnostic": {"k":"app","d":"Sierra Diagnostics: leest pc-statistieken en Windows-logboeken en geeft een reparatieplan","t":["windows","utility","diagnostics"]},
   "Endless1977/HA-NUC": {"k":"app","d":"Handleiding: Home Assistant + Claude Terminal op een Intel NUC","t":["home-assistant","home-automation","guide"]},
